@@ -1,0 +1,202 @@
+let root;
+let spacingX;
+let maxDepth = 9;  // Ensure 9 generations (up to 8th cousins)
+let nodeDiameter = 70;
+let minSpacingY = 100;
+let generationCounters = {};
+let generationY = {};
+let usedNames = new Set();
+let clickedPeople = [];
+
+let firstNames = [
+  "Alex", "Jamie", "Casey", "Taylor", "Jordan",
+  "Morgan", "Riley", "Cameron", "Skyler", "Avery",
+  "Dakota", "Emerson", "Peyton", "Quinn", "Reese",
+  "Rowan", "Sawyer", "Tatum", "Hayden", "Kai",
+  "Luca", "Noa", "Milo", "Aria", "Nova",
+  "Luna", "Ezra", "Sage", "Ivy", "Jude",
+  "Remy", "Blair", "Nico", "Zion", "Indie"
+];
+
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  spacingX = width / (maxDepth + 2);
+  shuffleArray(firstNames);
+  root = new Person(getUniqueName(), spacingX, minSpacingY, 0, null);
+  root.createDescendants(maxDepth);
+  textFont("Arial");
+  textSize(14);
+  noLoop();
+}
+
+function draw() {
+  background(245);
+  root.display();
+
+  if (clickedPeople.length === 2) {
+    // Draw line between selected people
+    stroke(255, 0, 0);
+    strokeWeight(3);
+    line(clickedPeople[0].x, clickedPeople[0].y, clickedPeople[1].x, clickedPeople[1].y);
+
+    // Show relationship text
+    noStroke();
+    fill(0);
+    textSize(16);
+    textAlign(CENTER, CENTER);
+    text(`Relationship: ${describeRelationship(clickedPeople[0], clickedPeople[1])}`, width / 2, height - 40);
+  }
+}
+
+function mousePressed() {
+  if (clickedPeople.length >= 2) {
+    clickedPeople = [];
+    redraw();
+    return;
+  }
+  root.checkClick(mouseX, mouseY);
+}
+
+class Person {
+  constructor(name, x, y, depth, parent) {
+    this.name = name;
+    this.x = x;
+    this.y = y;
+    this.depth = depth;
+    this.parent = parent;
+    this.children = [];
+  }
+
+  createDescendants(maxDepth) {
+    if (this.depth >= maxDepth) return;
+    if (!shouldHaveChildren(this.depth)) return;
+
+    let numChildren = floor(random(1, 5));
+    let nextGen = this.depth + 1;
+    generationY[nextGen] = generationY[nextGen] || minSpacingY;
+
+    for (let i = 0; i < numChildren; i++) {
+      let childX = this.x + spacingX;
+      let childY = generationY[nextGen];
+      generationY[nextGen] += minSpacingY;
+
+      let child = new Person(getUniqueName(), childX, childY, nextGen, this);
+      this.children.push(child);
+    }
+
+    if (this.children.length > 0) this.children[0].createDescendants(maxDepth);
+    if (this.children.length > 1) this.children[this.children.length - 1].createDescendants(maxDepth);
+  }
+
+  display() {
+    stroke(180);
+    for (let child of this.children) {
+      line(this.x, this.y, child.x, child.y);
+    }
+
+    noStroke();
+    fill(clickedPeople.includes(this) ? color(255, 100, 100) : color(100, 180, 255));
+    ellipse(this.x, this.y, nodeDiameter, nodeDiameter);
+    fill(0);
+    textAlign(CENTER, CENTER);
+    text(this.name, this.x, this.y);
+
+    for (let child of this.children) {
+      child.display();
+    }
+  }
+
+  checkClick(px, py) {
+    if (dist(px, py, this.x, this.y) < nodeDiameter / 2) {
+      if (!clickedPeople.includes(this)) {
+        clickedPeople.push(this);
+        redraw();
+      }
+    }
+    for (let child of this.children) {
+      child.checkClick(px, py);
+    }
+  }
+}
+
+function getUniqueName() {
+  while (firstNames.length > 0) {
+    let name = firstNames.pop();
+    if (!usedNames.has(name)) {
+      usedNames.add(name);
+      return name;
+    }
+  }
+
+  let newName;
+  do {
+    newName = generateName();
+  } while (usedNames.has(newName));
+  usedNames.add(newName);
+  return newName;
+}
+
+function generateName() {
+  let syllables = ["ka", "li", "ra", "na", "zi", "mo", "ti", "sa", "jo", "vi", "lu", "da", "me", "no"];
+  let name = capitalize(
+    syllables[floor(random(syllables.length))] +
+    syllables[floor(random(syllables.length))] +
+    (random() < 0.3 ? syllables[floor(random(syllables.length))] : "")
+  );
+  return name;
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    let j = floor(random(i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function shouldHaveChildren(depth) {
+  if (!(depth in generationCounters)) generationCounters[depth] = 0;
+  if (generationCounters[depth] < 2) {
+    generationCounters[depth]++;
+    return true;
+  }
+  return false;
+}
+
+function getAncestry(person) {
+  let ancestry = [];
+  while (person) {
+    ancestry.push(person);
+    person = person.parent;
+  }
+  return ancestry.reverse();
+}
+
+function describeRelationship(p1, p2) {
+  let a1 = getAncestry(p1);
+  let a2 = getAncestry(p2);
+  let commonDepth = 0;
+  let minLen = min(a1.length, a2.length);
+
+  for (let i = 0; i < minLen; i++) {
+    if (a1[i] === a2[i]) commonDepth = i;
+    else break;
+  }
+
+  let gen1 = a1.length - 1 - commonDepth;
+  let gen2 = a2.length - 1 - commonDepth;
+
+  if (gen1 === 0 && gen2 === 0) return "Same person";
+  if (gen1 === 0) return `${p2.name} is a descendant`;
+  if (gen2 === 0) return `${p1.name} is a descendant`;
+  if (gen1 === 1 && gen2 === 1) return "Siblings";
+
+  let cousinLevel = min(gen1, gen2) - 1;
+  let removal = abs(gen1 - gen2);
+  let levelNames = ["First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh", "Eighth"];
+  let label = levelNames[cousinLevel] || `${cousinLevel + 1}th`;
+  return `${label} Cousins${removal ? `, ${removal}x Removed` : ""}`;
+}
